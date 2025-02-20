@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Let's Find Nainai!</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 100vw;
+            max-height: 95vh;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .game-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            background-color: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .maze {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .player {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            transition: all 0.1s;
+            z-index: 2;
+        }
+
+        .treasure {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            opacity: 0.3;
+            transition: opacity 0.3s;
+            z-index: 1;
+            background-image: url('nainai.gif');
+            background-size: cover;
+            background-position: center;
+        }
+
+        .treasure.visible {
+            opacity: 1;
+        }
+
+        .fog {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                circle 150px at var(--x) var(--y),
+                transparent 20%,
+                rgba(0,0,0,0.9) 50%
+            );
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        .video-container {
+            width: 400px;
+            height: 500px;
+            flex-shrink: 0;
+        }
+
+        .video {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="game-container">
+            <div class="maze">
+                <div class="treasure" id="treasure1" style="top: 100px; left: 100px;"></div>
+                <div class="treasure" id="treasure2" style="top: 300px; left: 400px;"></div>
+                <div class="treasure" id="treasure3" style="top: 450px; left: 200px;"></div>
+                <img src="xiaobai.gif" alt="玩家" class="player" id="player">
+            </div>
+            <div class="fog"></div>
+        </div>
+
+        <div class="video-container">
+            <video id="mainVideo" class="video" controls>
+                <source id="videoSource" src="" type="video/mp4">
+            </video>
+        </div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const treasures = document.querySelectorAll('.treasure');
+        const fog = document.querySelector('.fog');
+        const mainVideo = document.getElementById('mainVideo');
+        const videoSource = document.getElementById('videoSource');
+
+        let playerX = 0;
+        let playerY = 0;
+        const step = 30;
+        const maxPosition = 500 - 40;
+        let changeTimeout = null;
+        const originalGIF = 'xiaobai.gif';
+        const videoMap = {
+            0: 'v1.mp4',
+            1: 'v2.mp4',
+            2: 'v3.mp4'
+        };
+
+        document.addEventListener('keydown', (event) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+                event.preventDefault();
+            }
+
+            switch (event.key) {
+                case 'ArrowUp':
+                    playerY = Math.max(playerY - step, 0);
+                    break;
+                case 'ArrowDown':
+                    playerY = Math.min(playerY + step, maxPosition);
+                    break;
+                case 'ArrowLeft':
+                    playerX = Math.max(playerX - step, 0);
+                    break;
+                case 'ArrowRight':
+                    playerX = Math.min(playerX + step, maxPosition);
+                    break;
+            }
+            
+            updatePlayerPosition();
+            updateFog();
+            checkTreasureVisibility();
+            checkTreasureCollision();
+        });
+
+        function updatePlayerPosition() {
+            player.style.top = `${playerY}px`;
+            player.style.left = `${playerX}px`;
+        }
+
+        function updateFog() {
+            const x = playerX + 20;
+            const y = playerY + 20;
+            fog.style.setProperty('--x', `${x}px`);
+            fog.style.setProperty('--y', `${y}px`);
+        }
+
+        function checkTreasureVisibility() {
+            const playerRect = player.getBoundingClientRect();
+            
+            treasures.forEach(treasure => {
+                const treasureRect = treasure.getBoundingClientRect();
+                treasure.classList.toggle('visible', isColliding(playerRect, treasureRect));
+            });
+        }
+
+        function checkTreasureCollision() {
+            const playerRect = player.getBoundingClientRect();
+
+            treasures.forEach((treasure, index) => {
+                if (treasure.classList.contains('collected')) return;
+
+                const treasureRect = treasure.getBoundingClientRect();
+                if (isColliding(playerRect, treasureRect)) {
+                    handleCollision(treasure, index);
+                }
+            });
+        }
+
+        function handleCollision(treasure, index) {
+            treasure.classList.add('collected');
+            treasure.style.opacity = '0';
+
+            mainVideo.pause();
+            mainVideo.currentTime = 0;
+
+            player.src = `v${index + 1}.gif`;
+            videoSource.src = videoMap[index];
+            mainVideo.load();
+            
+            try {
+                mainVideo.play();
+            } catch (error) {
+                console.log('需要用户交互才能播放视频');
+            }
+
+            if (changeTimeout) clearTimeout(changeTimeout);
+            changeTimeout = setTimeout(() => {
+                player.src = originalGIF;
+            }, 5000);
+        }
+
+        function isColliding(rect1, rect2) {
+            return !(
+                rect1.right < rect2.left ||
+                rect1.left > rect2.right ||
+                rect1.bottom < rect2.top ||
+                rect1.top > rect2.bottom
+            );
+        }
+    </script>
+</body>
+</html>
